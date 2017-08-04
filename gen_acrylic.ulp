@@ -1,0 +1,277 @@
+#usage "Generate Acrylic Enclosure"
+/* Written by Ray Wang at Rayshobby LLC
+ * Details: http://rayshobby.net/eaglecad-script-for-laser-cut-enclosures
+ */
+
+int minmin(int a, int b, int c) {
+  int x=a;
+  if(b<x) x=b;
+  if(c<x) x=c;
+  return x;
+}
+
+int maxmax(int a, int b, int c) {
+  int x=a;
+  if(b>x) x=b;
+  if(c>x) x=c;
+  return x;
+}
+
+int brd_mx=INT_MAX, brd_my=INT_MAX, brd_MX=INT_MIN, brd_MY=INT_MIN;
+
+board(B) {
+  B.wires(w) {
+    if(w.layer==20) {
+      brd_mx=minmin(brd_mx, w.x1, w.x2);
+      brd_my=minmin(brd_my, w.y1, w.y2);
+      brd_MX=maxmax(brd_MX, w.x1, w.x2);
+      brd_MY=maxmax(brd_MY, w.y1, w.y2);
+    }
+  }
+}
+
+real margin = 0.5;
+real edge = 2.7;
+real thickness = 2.8;
+real h_above = 11;
+real h_below = 3;
+real h_pcb = 1.6;
+real wing = 10.0;
+real hole = 4.2;
+real rcorner = 3.0;
+real sep = 2.0;
+real slot_round = 10.0;
+real slot_margin = 0.1;
+real tb_hole = 3.2;
+int ntopx = 3;
+int ntopy = 2;
+int nbotx = 2;
+int nboty = 1;
+int layer = 104;
+string s;
+
+void add_rectangle(real x1, real y1, real x2, real y2, real r) {
+  if(r>0.0) {
+    sprintf(s, "%sWIRE 0 (%f %f) (%f %f) +90 (%f %f) (%f %f) +90 (%f %f) (%f %f) +90 (%f %f) (%f %f) +90 (%f %f);", s, x1+r, y1, x2-r, y1, x2, y1+r, x2, y2-r, x2-r, y2, x1+r, y2, x1, y2-r, x1, y1+r, x1+r, y1);
+  } else {
+    sprintf(s, "%sWIRE 0 (%f %f) (%f %f) (%f %f) (%f %f) (%f %f);", s, x1, y1, x2, y1, x2, y2, x1, y2, x1, y1);
+  }
+}
+
+void add_circle(real x, real y, real r) {
+  sprintf(s, "%sCIRCLE 0.01 (%f %f) (%f %f);", s, x, y, x+r, y);
+}
+
+void add_xslots(real x, real y1, real y2, int n, real gap, real slot) {
+  int i;
+  for(i=0;i<n;i++)
+    add_rectangle(x+(i+1)*gap+i*slot, y1, x+(i+1)*gap+(i+1)*slot, y2, 0);
+}
+
+void add_yslots(real y, real x1, real x2, int n, real gap, real slot) {
+  int i;
+  for(i=0;i<n;i++)
+    add_rectangle(x1, y+(i+1)*gap+i*slot, x2, y+(i+1)*gap+(i+1)*slot, 0);
+}
+
+void add_xridges(real x, real y, real d, int n, real gap, real slot) {
+  int i;
+  for(i=0;i<n;i++) {
+    sprintf(s, "%s (%f %f) (%f %f) (%f %f) (%f %f)", s, x+i*(gap+slot), y, x+i*(gap+slot), y+d, x+i*gap+(i+1)*slot, y+d, x+i*gap+(i+1)*slot, y);
+  }
+}
+
+void add_yridges(real x, real y, real d, int n, real gap, real slot) {
+  int i;
+  for(i=0;i<n;i++) {
+    sprintf(s, "%s (%f %f) (%f %f) (%f %f) (%f %f)", s, x, y+i*(gap+slot), x+d, y+i*(gap+slot), x+d, y+i*gap+(i+1)*slot, x, y+i*gap+(i+1)*slot);
+  }
+}
+
+void generate() {
+  s = "";
+  sprintf(s, "%sGRID MM 0.01 100;DISPLAY NONE;LAYER %d acrylic;GROUP ALL;DELETE (>0 0);SET COLOR_LAYER %d 13;WINDOW;", s, layer, layer);
+  real top_mx = u2mm(brd_mx)-margin-thickness-edge;
+  real top_my = u2mm(brd_my)-margin-thickness-edge;
+  real top_MX = u2mm(brd_MX)+margin+thickness+edge;
+  real top_MY = u2mm(brd_MY)+margin+thickness+edge;
+
+  /* ---- TOP PIECE ---- */
+  add_rectangle(top_mx, top_my, top_MX, top_MY, rcorner);  // outline
+
+  // calculate slot length
+  real xslot_size = (top_MX-top_mx)/(ntopx+ntopx+1);
+  xslot_size = round(xslot_size/slot_round)*slot_round; // round to the nearest multiple of round
+  real yslot_size = (top_MY-top_my)/(ntopy+ntopy+1);
+  yslot_size = round(yslot_size/slot_round)*slot_round; // round to the nearest multiple
+
+  real top_xgap_size = ((top_MX-top_mx)-ntopx*xslot_size)/(ntopx+1);
+  real top_ygap_size = ((top_MY-top_my)-ntopy*yslot_size)/(ntopy+1);
+  int i;
+  // add top x slots
+  real a = top_my+edge;
+  real b = a+thickness;
+  add_xslots(top_mx, a, b, ntopx, top_xgap_size, xslot_size);
+  a = top_MY-edge-thickness;
+  b = a+thickness;
+  add_xslots(top_mx, a, b, ntopx, top_xgap_size, xslot_size);
+
+  // add top y slots
+  a = top_mx+edge;
+  b = a+thickness;
+  add_yslots(top_my, a, b, ntopy, top_ygap_size, yslot_size);
+  a = top_MX-edge-thickness;
+  b = a+thickness;
+  add_yslots(top_my, a, b, ntopy, top_ygap_size, yslot_size);
+
+  /* ---- BOTTOM PIECE (BACK PANEL) ---- */
+  real ox, oy;
+  real bot_mx = top_mx-wing;
+  real bot_my = top_MY+sep;
+  real bot_MX = top_MX+wing;
+  real bot_MY = top_MY-top_my+bot_my;
+  add_rectangle(bot_mx, bot_my, bot_MX, bot_MY, rcorner);  // outline
+
+  // calculate slot gap size
+  real bot_xgap_size = ((top_MX-top_mx)-nbotx*xslot_size)/(nbotx+1);
+  real bot_ygap_size = ((top_MY-top_my)-nboty*yslot_size)/(nboty+1);
+  // add bot x slots
+  a = bot_my+edge;
+  b = a+thickness;
+  add_xslots(top_mx, a, b, nbotx, bot_xgap_size, xslot_size);
+  a = bot_MY-edge-thickness;
+  b = a+thickness;
+  add_xslots(top_mx, a, b, nbotx, bot_xgap_size, xslot_size);
+
+  // add bot y slots
+  a = top_mx+edge;
+  b = a+thickness;
+  add_yslots(bot_my, a, b, nboty, bot_ygap_size, yslot_size);
+  a = top_MX-edge-thickness;
+  b = a+thickness;
+  add_yslots(bot_my, a, b, nboty, bot_ygap_size, yslot_size);  
+
+  // add holes
+  real bot_height = (bot_MY-bot_my);
+  if(wing > 0) {
+    add_circle(bot_mx+wing/2, bot_my+bot_height/4, hole/2);
+    add_circle(bot_mx+wing/2, bot_my+3*bot_height/4, hole/2);
+    add_circle(bot_MX-wing/2, bot_my+bot_height/4, hole/2);
+    add_circle(bot_MX-wing/2, bot_my+3*bot_height/4, hole/2);
+  }
+
+  /* ---- FRONT PIECE ---- */
+  real height = h_above+h_below+h_pcb;
+  real fslot_size = floor(height/2);
+  real fgap_size = (height-fslot_size)/2;
+
+  ox = top_mx+edge;
+  oy = top_my-sep-thickness;
+  sprintf(s, "%sWIRE 0 (%f %f)", s, ox, oy);
+  add_xridges(top_mx+top_xgap_size+slot_margin, oy, thickness, ntopx, top_xgap_size+2*slot_margin, xslot_size-2*slot_margin);
+  sprintf(s, "%s (%f %f)", s, top_MX-edge, oy);
+  add_yridges(top_MX-edge, oy-fgap_size, -thickness, 1, -fgap_size, -fslot_size);
+  sprintf(s, "%s (%f %f)", s, top_MX-edge, oy-height);
+  add_xridges(top_MX-bot_xgap_size-slot_margin, oy-height, -thickness, nbotx, -(bot_xgap_size+2*slot_margin), -(xslot_size-2*slot_margin));
+  sprintf(s, "%s (%f %f)", s, ox, oy-height);
+  add_yridges(ox, oy-height+fgap_size, thickness, 1, fgap_size, fslot_size);
+  sprintf(s, "%s (%f %f);", s, ox, oy);
+
+  /* ---- MOVE UP BOTTOM PIECE and COPY FRONT to MAKE BACK PIECE --- */
+  sprintf(s, "%sGROUP (%f %f) (%f %f) (%f %f) (%f %f) (%f %f);MOVE (>0 0) (%f %f);", s, bot_mx, bot_my, bot_MX, bot_my, bot_MX, bot_MY, bot_mx, bot_MY, bot_mx, bot_my, 0.0, height+2*thickness+sep);
+
+  real front_mx = ox;
+  real front_my = oy-height-thickness;
+  real front_MX = top_MX-edge;
+  real front_MY = oy+thickness;
+  sprintf(s, "%sGROUP (%f %f) (%f %f) (%f %f) (%f %f) (%f %f);COPY (>0 0) (0 %f);", s, front_mx, front_my, front_MX, front_my, front_MX, front_MY, front_mx, front_MY, front_mx, front_my, 2*(thickness+sep)+height+(top_MY-top_my));
+  real back_mx = front_mx;
+  real back_my = front_my+2*(thickness+sep)+height+(top_MY-top_my);
+  real back_MX = front_MX;
+  real back_MY = front_MY+2*(thickness+sep)+height+(top_MY-top_my);
+  sprintf(s, "%sGROUP (%f %f) (%f %f) (%f %f) (%f %f) (%f %f);ROTATE R180 (>%f %f);", s, back_mx, back_my, back_MX, back_my, back_MX, back_MY, back_mx, back_MY, back_mx, back_my, (back_mx+back_MX)/2.0, (back_my+back_MY)/2.0);
+
+  /* ---- LEFT PIECE ---- */
+  ox = top_mx-sep-thickness;
+  oy = top_MY-edge-thickness;
+  sprintf(s, "%sWIRE 0 (%f %f)", s, ox, oy);
+  add_yridges(ox, top_MY-top_ygap_size-slot_margin, thickness, ntopy, -(top_ygap_size+2*slot_margin), -(yslot_size-2*slot_margin));
+  sprintf(s, "%s (%f %f)", s, ox, top_my+edge+thickness);
+  add_xridges(ox-fgap_size-slot_margin, top_my+edge+thickness, -thickness, 1, -(fgap_size+2*slot_margin), -(fslot_size-2*slot_margin));
+  sprintf(s, "%s (%f %f)", s, ox-height, top_my+edge+thickness);
+  add_yridges(ox-height, top_my+bot_ygap_size+slot_margin, -thickness, nboty, bot_ygap_size+2*slot_margin, yslot_size-2*slot_margin);
+  sprintf(s, "%s (%f %f)", s, ox-height, oy);
+  add_xridges(ox-height+fgap_size+slot_margin, oy, thickness, 1, fgap_size+2*slot_margin, fslot_size-2*slot_margin);
+  sprintf(s, "%s (%f %f);", s, ox, oy); 
+
+  /* ---- COPY LEFT PIECE to MAKE RIGHT PIECE ---- */
+  real left_mx = ox-height-thickness;
+  real left_my = top_my+edge;
+  real left_MX = ox+thickness;
+  real left_MY = oy+thickness;
+  sprintf(s, "%sGROUP (%f %f) (%f %f) (%f %f) (%f %f) (%f %f);COPY (>0 0) (%f 0);", s, left_mx, left_my, left_MX, left_my, left_MX, left_MY, left_mx, left_MY, left_mx, left_my, 2*(thickness+sep)+height+(top_MX-top_mx));
+  real right_mx = left_mx+2*(thickness+sep)+height+(top_MX-top_mx);
+  real right_my = left_my;
+  real right_MX = left_MX+2*(thickness+sep)+height+(top_MX-top_mx);
+  real right_MY = left_MY;
+  sprintf(s, "%sGROUP (%f %f) (%f %f) (%f %f) (%f %f) (%f %f);ROTATE R180 (>%f %f);", s, right_mx, right_my, right_MX, right_my, right_MX, right_MY, right_mx, right_MY, right_mx, right_my, (right_mx+right_MX)/2.0, (right_my+right_MY)/2.0);
+
+  board(B) {
+    B.holes(H) {
+      add_circle(u2mm(H.x), u2mm(H.y), tb_hole/2.0);
+      add_circle(u2mm(H.x), u2mm(H.y)+2*(sep+thickness)+height+(top_MY-top_my), tb_hole/2.0);
+    }
+  }
+
+  sprintf(s, "%sDISPLAY NONE %d 20;GRID MM 0.5 1;GROUP;", s, layer);
+
+  exit(s);
+}
+
+int Result = dlgDialog("Enclosure Parameters") {
+  dlgGridLayout {
+    int idx=0;
+    dlgCell(idx,0) dlgLabel("PCB-enc margin:");
+    dlgCell(idx,1) dlgRealEdit(margin, 0.0, 10.0);
+    dlgCell(idx,2) dlgLabel("Slot-edge margin:");
+    dlgCell(idx++,3) dlgRealEdit(edge, 1.0, 10.0);
+    dlgCell(idx,0) dlgLabel("Acrylic thickness:");
+    dlgCell(idx,1) dlgRealEdit(thickness, 0.1, 5.0);
+    dlgCell(idx,2) dlgLabel("PCB thickness:");
+    dlgCell(idx++,3) dlgRealEdit(h_pcb, 0.1, 2.0); 
+    dlgCell(idx,0) dlgLabel("<b>Height above PCB:</b>");
+    dlgCell(idx,1) dlgRealEdit(h_above, 0.0, 50.0);
+    dlgCell(idx,2) dlgLabel("<b>Height below PCB:</b>");
+    dlgCell(idx++,3) dlgRealEdit(h_below, 0.0, 50.0);
+    dlgCell(idx,0) dlgLabel("<b># TopX slots:</b>");
+    dlgCell(idx,1) dlgIntEdit(ntopx, 1, 5);
+    dlgCell(idx,2) dlgLabel("<b># TopY slots:</b>");
+    dlgCell(idx++,3) dlgIntEdit(ntopy, 1, 5);
+    dlgCell(idx,0) dlgLabel("<b># BotX slots:</b>");
+    dlgCell(idx,1) dlgIntEdit(nbotx, 1, 5);
+    dlgCell(idx,2) dlgLabel("<b># BotY slots:</b>");
+    dlgCell(idx++,3) dlgIntEdit(nboty, 1, 5);
+    dlgCell(idx,0) dlgLabel("Mount wing size:");
+    dlgCell(idx,1) dlgRealEdit(wing, 0.0, 100.0);
+    dlgCell(idx,2) dlgLabel("Mount hole size:");
+    dlgCell(idx++,3) dlgRealEdit(hole, 0.0, 10.0);
+    dlgCell(idx,0) dlgLabel("Eagle layer:");
+    dlgCell(idx,1) dlgIntEdit(layer, 1, 255);
+    dlgCell(idx,2) dlgLabel("Round corner r:");
+    dlgCell(idx++,3) dlgRealEdit(rcorner,0.0, 10.0);
+    dlgCell(idx,0) dlgLabel("Slot rounding:");
+    dlgCell(idx,1) dlgRealEdit(slot_round, 1, 20);
+    dlgCell(idx,2) dlgLabel("Slot-plug margin:");
+    dlgCell(idx++,3) dlgRealEdit(slot_margin, 0.0, 0.5);
+    dlgCell(idx,0) dlgLabel("TB hole size:");
+    dlgCell(idx,1) dlgRealEdit(tb_hole, 0.1, 20);
+  }
+  dlgSpacing(10);
+  dlgHBoxLayout {
+    dlgPushButton("+Generate") {
+      dlgAccept();
+      generate();
+    }
+    dlgPushButton("Cancel") dlgReject();
+  }
+};
